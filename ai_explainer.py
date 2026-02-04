@@ -20,6 +20,8 @@ if not GROQ_API_KEY or not GROQ_API_KEY.startswith('gsk_'):
 # Cache client init to avoid recreating on every rerun
 @st.cache_resource
 def get_groq_client():
+    if not GROQ_API_KEY or not GROQ_API_KEY.startswith('gsk_'):
+        raise ValueError("Missing valid GROQ_API_KEY in secrets")
     return Groq(api_key=GROQ_API_KEY)
 
 client = get_groq_client()
@@ -35,6 +37,7 @@ with st.expander("API Status"):
         AI_AVAILABLE = True
         st.success("✅ Groq API connected!")
     except Exception as e:
+        AI_AVAILABLE = False
         st.error(f"❌ API error: {str(e)}")
 
 
