@@ -2,7 +2,6 @@
 AI-powered clause explanation using Groq API (FREE & FAST!)
 Falls back to templates if API is unavailable
 """
-import os
 import streamlit as st
 from groq import Groq
 from risk_explanations import get_template_explanation, get_hindi_template_explanation
@@ -10,6 +9,9 @@ from risk_explanations import get_template_explanation, get_hindi_template_expla
 
 # Get from environment (Streamlit secrets automatically go into os.environ)
 GROQ_API_KEY = st.secrets.get("GROQ_API_KEY", "")
+
+AI_AVAILABLE = False
+
 
 if not GROQ_API_KEY or not GROQ_API_KEY.startswith('gsk_'):
     st.error("❌ No valid GROQ_API_KEY in secrets!")
@@ -30,6 +32,7 @@ with st.expander("API Status"):
             model="llama-3.1-8b-instant",
             max_tokens=1
         )
+        AI_AVAILABLE = True
         st.success("✅ Groq API connected!")
     except Exception as e:
         st.error(f"❌ API error: {str(e)}")
