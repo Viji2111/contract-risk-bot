@@ -2,91 +2,110 @@
 AI-powered clause explanation using Groq API (FREE & FAST!)
 Falls back to templates if API is unavailable
 """
+import os
 import streamlit as st
 from groq import Groq
-from risk_explanations import (
-    get_template_explanation,
-    get_hindi_template_explanation,
-)
+from risk_explanations import get_template_explanation, get_hindi_template_explanation
 
-# ---------------- LOAD API KEY ----------------
+
+# Get from environment (Streamlit secrets automatically go into os.environ)
 GROQ_API_KEY = st.secrets.get("GROQ_API_KEY", "")
 
-AI_AVAILABLE = False
-client = None
+if not GROQ_API_KEY or not GROQ_API_KEY.startswith('gsk_'):
+    st.error("❌ No valid GROQ_API_KEY in secrets!")
+    st.stop()
 
-if GROQ_API_KEY and GROQ_API_KEY.startswith("gsk_"):
+# Cache client init to avoid recreating on every rerun
+@st.cache_resource
+def get_groq_client():
+    return Groq(api_key=GROQ_API_KEY)
+
+client = get_groq_client()
+
+# Test connection once (optional, in sidebar or expander)
+with st.expander("API Status"):
     try:
-        client = Groq(api_key=GROQ_API_KEY)
-        AI_AVAILABLE = True
-    except Exception:
-        AI_AVAILABLE = False
+        test_response = client.chat.completions.create(
+            messages=[{"role": "user", "content": "test"}],
+            model="llama-3.1-8b-instant",
+            max_tokens=1
+        )
+        st.success("✅ Groq API connected!")
+    except Exception as e:
+        st.error(f"❌ API error: {str(e)}")
 
 
-# ---------------- MAIN FUNCTION ----------------
 def explain_clause(clause: str, language: str = "en", risk_type: str = None) -> str:
     """
-    Explain contract clause using Groq AI.
-    Falls back to templates if AI unavailable.
-    """
-
-    # 🔁 Fallback if AI unavailable
+    Get AI-powered explanation of a contract clause using Groq
+    
+    Args:
+        clause: The contract clause text
+        language: 'en' for English, 'hi' for Hindi, 'both' for bilingual
+        risk_type: Optional risk type for better fallback
+    
+    Returns:
+        Formatted explanation
+    """    
+    # If AI is not available, use templates
     if not AI_AVAILABLE or not client:
+        print("⚠️ Using template fallback")
         if language == "hi":
-            return (
-                get_hindi_template_explanation(risk_type)
-                if risk_type
-                else "⚠️ AI अभी उपलब्ध नहीं है।"
-            )
-        return (
-            get_template_explanation(risk_type)
-            if risk_type
-            else "⚠️ AI explanation unavailable."
-        )
-
-    # 🌍 Language instruction
+            return get_hindi_template_explanation(risk_type) if risk_type else "AI अनुपलब्ध है।"
+        return get_template_explanation(risk_type) if risk_type else "AI unavailable."
+    
+    # Prepare language-specific instructions
     if language == "hi":
-        lang_instruction = "Explain only in simple Hindi."
+        lang_instruction = "Explain in Hindi (हिंदी में समझाएं). Use simple Hindi that common people can understand."
     elif language == "both":
-        lang_instruction = "Explain in English first, then Hindi."
+        lang_instruction = "Provide explanation in both English and Hindi side by side."
     else:
-        lang_instruction = "Explain in simple business English."
+        lang_instruction = "Explain in clear, simple English."
+    
+    # Create prompt
+    prompt = f"""{lang_instruction}
 
-    prompt = f"""
-{lang_instruction}
+Analyze this contract clause and provide a practical explanation with these 4 sections:
 
-Explain the contract clause WITHOUT repeating it.
+1. **Meaning** - What this clause says in everyday language
+2. **Risk** - What problems or costs this could cause for the person signing
+3. **Who Benefits** - Which party gains advantage from this clause
+4. **Recommendation** - Specific action to take (negotiate, remove, modify, or accept)
 
-Provide exactly these sections:
-1. Meaning
-2. Risk
-3. Who Benefits
-4. Risk Mitigation (clear actions)
-
-Keep it practical and short.
-
-Clause:
+Contract Clause:
 {clause}
-"""
+
+Keep each section concise (2-3 sentences max). Be direct and practical."""
 
     try:
-        response = client.chat.completions.create(
-            model="llama-3.1-8b-instant",  # ✅ FAST + FREE
+        print("🚀 Calling Groq API...")
+        # Call Groq API
+        chat_completion = client.chat.completions.create(
             messages=[
-                {"role": "system", "content": "You are a legal risk advisor for non-lawyers."},
-                {"role": "user", "content": prompt},
+                {
+                    "role": "system",
+                    "content": "You are a helpful legal assistant that explains contract clauses in simple, practical language. You focus on real-world implications and actionable advice."
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
             ],
-            temperature=0.2,
-            max_tokens=350,
+            model="llama-3.3-70b-versatile",
+            temperature=0.3,
+            max_tokens=600
         )
-
-        return response.choices[0].message.content.strip()
-
-    except Exception:
+        
+        explanation = chat_completion.choices[0].message.content
+        print("✅ Got AI response successfully!")
+        return explanation
+        
+    except Exception as e:
+        print(f"❌ Groq API Error during explanation: {str(e)}")
+        # Fallback to templates
         if language == "hi":
-            return "⚠️ AI अस्थायी रूप से व्यस्त है।"
-        return "⚠️ AI service is temporarily busy."
-
+            return get_hindi_template_explanation(risk_type) if risk_type else "⚠️ AI अस्थायी रूप से अनुपलब्ध है।"
+        return get_template_explanation(risk_type) if risk_type else "⚠️ AI temporarily unavailable."
 
 
 def explain_multiple_risks(clause: str, risks: list, language: str = "en") -> str:
