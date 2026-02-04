@@ -12,7 +12,9 @@ from risk_explanations import get_template_explanation, get_hindi_template_expla
 load_dotenv(override=True)
 
 # Get from environment (Streamlit secrets automatically go into os.environ)
-GROQ_API_KEY = st.secrets.get("GROQ_API_KEY", None)
+GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
+st.write(f"API Key: {GROQ_API_KEY}")
+
 
 # Clean the key
 GROQ_API_KEY = GROQ_API_KEY.strip().strip('"').strip("'")
